@@ -1,9 +1,11 @@
 #include <libevdev/libevdev.h>
+#include <libevdev/libevdev-uinput.h>
 #include <stdio.h>
 #include <string.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <sys/epoll.h>
+#include <unistd.h>
 
 #define MAX_EVENTS 10
 
@@ -14,7 +16,7 @@ int main() {
   int err;
 
   fd1 = open("/dev/input/by-id/usb-VEC_VEC_USB_Footpedal-event-if00", O_RDONLY|O_NONBLOCK);
-  fd2 = open("/dev/input/by-id/usb-Keyboardio_Atreus_CatreusE-if03-event-kbd", O_RDONLY|O_NONBLOCK);
+  fd2 = open("/dev/input/by-id/usb-055a_0998-event-kbd", O_RDONLY|O_NONBLOCK);
 
   err = libevdev_new_from_fd(fd1, &dev1);
   if (err < 0) {
@@ -63,25 +65,35 @@ int main() {
     return 1;
   }
 
+  struct libevdev *newdev = libevdev_new();
+  libevdev_set_name(newdev, "evmerge device");
+  libevdev_enable_event_type(newdev, EV_KEY);
+  libevdev_enable_event_code(newdev, EV_KEY, KEY_F14, NULL);
+  libevdev_enable_event_code(newdev, EV_KEY, KEY_F15, NULL);
+  libevdev_enable_event_code(newdev, EV_KEY, KEY_F16, NULL);
+  libevdev_enable_event_code(newdev, EV_KEY, KEY_1, NULL);
+  libevdev_enable_event_code(newdev, EV_KEY, KEY_2, NULL);
+  libevdev_enable_event_code(newdev, EV_KEY, KEY_3, NULL);
+
+  struct libevdev_uinput *uidev;
+
   int uifd = open("/dev/uinput", O_RDWR);
   if (uifd < 0) {
     fprintf(stderr, "Failed to open /dev/uinput (%m)\n");
     return 1;
   }
 
-  struct libevdev_uinput *uidev;
-  err = libevdev_uinput_create_from_device(dev1, uifd, &uidev);
+  err = libevdev_uinput_create_from_device(newdev, uifd, &uidev);
   if (err != 0) {
     fprintf(stderr, "Failed to create uinput device (%s)\n", strerror(-err));
     return 1;
   }
-  libevdev_set_name(uidev, "evmerge device");
-  fprintf(stderr, "Created device '%s'\n", libevdev_get_name(uidev));
+  fprintf(stderr, "Created device '%s'\n", libevdev_get_name(newdev));
 
 
   do {
     struct input_event ev;
-    struct epoll_event epoll_events[MAX_EVENTS];
+    /*struct epoll_event epoll_events[MAX_EVENTS];
     int nfds = epoll_wait(epoll_fd, epoll_events, MAX_EVENTS, -1);
     if (nfds == -1) {
       fprintf(stderr, "Failed in epoll_wait\n");
@@ -90,21 +102,36 @@ int main() {
 
     printf("Got events: %d\n", nfds);
     for (int i = 0; i < nfds; i++) {
-      struct libevdev *dev = epoll_events[i].data.ptr;
+      struct libevdev *dev = epoll_events[i].data.ptr;*/
 
-      err = libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev);
+      err = libevdev_next_event(dev1, LIBEVDEV_READ_FLAG_NORMAL, &ev);
       if (err == 0) {
         fprintf(stderr, "Event: %s %s %d\n",
             libevdev_event_type_get_name(ev.type),
             libevdev_event_code_get_name(ev.type, ev.code),
             ev.value);
-        //err = libevdev_uinput_write_event(uidev, ev.type, ev.code, ev.value);
+        err = libevdev_uinput_write_event(uidev, ev.type, ev.code, ev.value);
         if (err != 0) {
           fprintf(stderr, "Failed in writing to uinput device (%s)\n", strerror(-err));
           return 1;
         }
       }
-    }
+
+      err = libevdev_next_event(dev2, LIBEVDEV_READ_FLAG_NORMAL, &ev);
+      if (err == 0) {
+        fprintf(stderr, "Event: %s %s %d\n",
+            libevdev_event_type_get_name(ev.type),
+            libevdev_event_code_get_name(ev.type, ev.code),
+            ev.value);
+        //err = libevdev_uinput_write_event(uidev, ev.type, ev.type == EV_KEY ? KEY_F15 : ev.code, ev.value);
+        err = libevdev_uinput_write_event(uidev, ev.type, ev.code, ev.value);
+        if (err != 0) {
+          fprintf(stderr, "Failed in writing to uinput device (%s)\n", strerror(-err));
+          return 1;
+        }
+      }
+      usleep(1000);
+    //}
   } while (err == 1 || err == 0 || err == -EAGAIN);
 
 
