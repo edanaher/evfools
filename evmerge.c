@@ -30,6 +30,9 @@ int main() {
   }
   fprintf(stderr, "Binding device '%s'\n", libevdev_get_name(dev1));
 
+  printf("Version is %d\n", libevdev_get_id_version(dev1));
+  printf("Vendor id is %x\n", libevdev_get_id_vendor(dev1));
+
   err = libevdev_new_from_fd(fd2, &dev2);
   if (err < 0) {
     fprintf(stderr, "Failed to init libevdev (%s)\n", strerror(-err));
@@ -67,6 +70,11 @@ int main() {
 
   struct libevdev *newdev = libevdev_new();
   libevdev_set_name(newdev, "evmerge device");
+  libevdev_set_id_vendor(newdev, 0x0991); // Random apparently unused vendor id.
+  libevdev_set_id_product(newdev, 0xaf14); // Random digits
+  libevdev_set_id_bustype(newdev, BUS_USB);
+  libevdev_set_id_version(newdev, 256);
+  libevdev_set_phys(newdev, "evmerge");
   libevdev_enable_event_type(newdev, EV_KEY);
   libevdev_enable_event_code(newdev, EV_KEY, KEY_F14, NULL);
   libevdev_enable_event_code(newdev, EV_KEY, KEY_F15, NULL);
@@ -90,6 +98,10 @@ int main() {
   }
   fprintf(stderr, "Created device '%s'\n", libevdev_get_name(newdev));
 
+  const char *syspath = libevdev_uinput_get_syspath(uidev);
+  const char *devnode = libevdev_uinput_get_devnode(uidev);
+
+  fprintf(stderr, "Path and name %s / %s\n", syspath, devnode);
 
   do {
     struct input_event ev;
