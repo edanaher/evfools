@@ -12,11 +12,13 @@
 int main() {
   struct libevdev *dev1 = NULL;
   struct libevdev *dev2 = NULL;
-  int fd1, fd2;
+  struct libevdev *dev3 = NULL;
+  int fd1, fd2, fd3;
   int err;
 
   fd1 = open("/dev/input/by-id/usb-VEC_VEC_USB_Footpedal-event-if00", O_RDONLY|O_NONBLOCK);
-  fd2 = open("/dev/input/by-id/usb-055a_0998-event-kbd", O_RDONLY|O_NONBLOCK);
+  fd2 = open("/dev/input/by-id/foot-pedal-back", O_RDONLY|O_NONBLOCK);
+  fd3 = open("/dev/input/by-id/foot-pedal-front", O_RDONLY|O_NONBLOCK);
 
   err = libevdev_new_from_fd(fd1, &dev1);
   if (err < 0) {
@@ -43,8 +45,21 @@ int main() {
     fprintf(stderr, "Failed to grab device (%s)\n", strerror(-err));
     return 1;
   }
+
+  err = libevdev_new_from_fd(fd3, &dev3);
+  if (err < 0) {
+    fprintf(stderr, "Failed to init libevdev (%s)\n", strerror(-err));
+    return 1;
+  }
+  err = libevdev_grab(dev3, LIBEVDEV_GRAB);
+  if (err < 0) {
+    fprintf(stderr, "Failed to grab device (%s)\n", strerror(-err));
+    return 1;
+  }
+
   fprintf(stderr, "Binding device '%s'\n", libevdev_get_name(dev1));
   fprintf(stderr, "Binding device '%s'\n", libevdev_get_name(dev2));
+  fprintf(stderr, "Binding device '%s'\n", libevdev_get_name(dev3));
 
   int epoll_fd = epoll_create1(0);
   if (epoll_fd == -1) {
@@ -68,6 +83,14 @@ int main() {
     return 1;
   }
 
+  struct epoll_event epoll_ev3;
+  epoll_ev3.events = EPOLLIN;
+  epoll_ev3.data.ptr = dev3;
+  if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd3, &epoll_ev3) == -1) {
+    fprintf(stderr, "Failed to add fd3 to epoll set\n");
+    return 1;
+  }
+
   struct libevdev *newdev = libevdev_new();
   libevdev_set_name(newdev, "evmerge device");
   libevdev_set_id_vendor(newdev, 0x0991); // Random apparently unused vendor id.
@@ -82,6 +105,10 @@ int main() {
   libevdev_enable_event_code(newdev, EV_KEY, KEY_1, NULL);
   libevdev_enable_event_code(newdev, EV_KEY, KEY_2, NULL);
   libevdev_enable_event_code(newdev, EV_KEY, KEY_3, NULL);
+  libevdev_enable_event_code(newdev, EV_KEY, KEY_4, NULL);
+  libevdev_enable_event_code(newdev, EV_KEY, KEY_5, NULL);
+  libevdev_enable_event_code(newdev, EV_KEY, KEY_6, NULL);
+  libevdev_enable_event_code(newdev, EV_KEY, BTN_LEFT, NULL);
 
   struct libevdev_uinput *uidev;
 
@@ -117,6 +144,19 @@ int main() {
       struct libevdev *dev = epoll_events[i].data.ptr;
 
       while(!(err = libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev))) {
+        if(dev == dev3) {
+          switch(ev.code) {
+            case KEY_1:
+              ev.code = KEY_4;
+              break;
+            case KEY_2:
+              ev.code = KEY_5;
+              break;
+            case KEY_3:
+              ev.code = KEY_6;
+              break;
+          }
+        }
         fprintf(stderr, "Event: %s %s %d\n",
             libevdev_event_type_get_name(ev.type),
             libevdev_event_code_get_name(ev.type, ev.code),
