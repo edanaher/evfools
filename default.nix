@@ -9,6 +9,7 @@ stdenv.mkDerivation {
   installPhase = ''
     mkdir -p $out/bin
     cp evmerge $out/bin
+    cp dobuttons $out/bin
   '';
 
   meta =  {
