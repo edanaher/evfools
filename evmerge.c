@@ -11,68 +11,35 @@
 #define MAX_EVENTS 10
 
 int main(int argc, char **argv) {
-  struct libevdev **devs = calloc(3, sizeof(struct libevdev *));
-  int *fds = calloc(3, sizeof(int));
+  int ndevices = argc - 1;
+  struct libevdev **devs = calloc(ndevices, sizeof(struct libevdev *));
+  int *fds = calloc(ndevices, sizeof(int));
   int err;
 
-  printf("argc: %d; argv[1]: %s", argc, argv[1]);
-  fds[0] = open("/dev/input/by-id/usb-VEC_VEC_USB_Footpedal-event-if00", O_RDONLY|O_NONBLOCK);
-  if (fds[0] < 0) {
-    fprintf(stderr, "Failed to open input 0: %s", strerror(-err));
-    return 1;
+  fprintf(stderr, "argc: %d; argv[1]: %s\n", argc, argv[1]);
+  for (int i = 0; i < ndevices; i++) {
+    fds[i] = open(argv[i+1], O_RDONLY|O_NONBLOCK);
+    if (fds[i] < 0) {
+      fprintf(stderr, "Failed to open input %d (%s): %s", i, argv[i+1], strerror(-err));
+      return 1;
+    }
+
+    err = libevdev_new_from_fd(fds[i], &devs[i]);
+    if (err < 0) {
+      fprintf(stderr, "Failed to init libevdev %d (%s): %s\n", i, argv[i+1], strerror(-err));
+      return 1;
+    }
+    err = libevdev_grab(devs[i], LIBEVDEV_GRAB);
+    if (err < 0) {
+      fprintf(stderr, "Failed to grab device %d (%s): %s\n", i, argv[i+1], strerror(-err));
+      return 1;
+    }
+    fprintf(stderr, "Binding device %s: '%s'\n", argv[i+1], libevdev_get_name(devs[i]));
+
+    fprintf(stderr, "  Version is %d\n", libevdev_get_id_version(devs[i]));
+    fprintf(stderr, "  Vendor id is %x\n", libevdev_get_id_vendor(devs[i]));
   }
 
-  fds[1] = open("/dev/input/by-id/foot-pedal-back", O_RDONLY|O_NONBLOCK);
-  if (fds[1] < 0) {
-    fprintf(stderr, "Failed to open input 1: %s", strerror(-err));
-    return 1;
-  }
-  fds[2] = open("/dev/input/by-id/foot-pedal-front", O_RDONLY|O_NONBLOCK);
-  if (fds[2] < 0) {
-    fprintf(stderr, "Failed to open input 2: %s", strerror(-err));
-    return 1;
-  }
-
-  err = libevdev_new_from_fd(fds[0], &devs[0]);
-  if (err < 0) {
-    fprintf(stderr, "Failed to init libevdev (%s)\n", strerror(-err));
-    return 1;
-  }
-  err = libevdev_grab(devs[0], LIBEVDEV_GRAB);
-  if (err < 0) {
-    fprintf(stderr, "Failed to grab device (%s)\n", strerror(-err));
-    return 1;
-  }
-  fprintf(stderr, "Binding device '%s'\n", libevdev_get_name(devs[0]));
-
-  printf("Version is %d\n", libevdev_get_id_version(devs[0]));
-  printf("Vendor id is %x\n", libevdev_get_id_vendor(devs[0]));
-
-  err = libevdev_new_from_fd(fds[1], &devs[1]);
-  if (err < 0) {
-    fprintf(stderr, "Failed to init libevdev (%s)\n", strerror(-err));
-    return 1;
-  }
-  err = libevdev_grab(devs[1], LIBEVDEV_GRAB);
-  if (err < 0) {
-    fprintf(stderr, "Failed to grab device (%s)\n", strerror(-err));
-    return 1;
-  }
-
-  err = libevdev_new_from_fd(fds[2], &devs[2]);
-  if (err < 0) {
-    fprintf(stderr, "Failed to init libevdev (%s)\n", strerror(-err));
-    return 1;
-  }
-  err = libevdev_grab(devs[2], LIBEVDEV_GRAB);
-  if (err < 0) {
-    fprintf(stderr, "Failed to grab device (%s)\n", strerror(-err));
-    return 1;
-  }
-
-  fprintf(stderr, "Binding device '%s'\n", libevdev_get_name(devs[0]));
-  fprintf(stderr, "Binding device '%s'\n", libevdev_get_name(devs[1]));
-  fprintf(stderr, "Binding device '%s'\n", libevdev_get_name(devs[2]));
 
   int epoll_fd = epoll_create1(0);
   if (epoll_fd == -1) {
@@ -81,25 +48,13 @@ int main(int argc, char **argv) {
   }
 
   struct epoll_event epoll_ev;
-  epoll_ev.events = EPOLLIN;
-  epoll_ev.data.ptr = devs[0];
-  if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fds[0], &epoll_ev) == -1) {
-    fprintf(stderr, "Failed to add fds[0] to epoll set\n");
-    return 1;
-  }
-
-  epoll_ev.events = EPOLLIN;
-  epoll_ev.data.ptr = devs[1];
-  if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fds[1], &epoll_ev) == -1) {
-    fprintf(stderr, "Failed to add fds[1] to epoll set\n");
-    return 1;
-  }
-
-  epoll_ev.events = EPOLLIN;
-  epoll_ev.data.ptr = devs[2];
-  if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fds[2], &epoll_ev) == -1) {
-    fprintf(stderr, "Failed to add fds[2] to epoll set\n");
-    return 1;
+  for (int i = 0; i < ndevices; i++) {
+    epoll_ev.events = EPOLLIN;
+    epoll_ev.data.ptr = devs[i];
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fds[i], &epoll_ev) == -1) {
+      fprintf(stderr, "Failed to add fds[%d] to epoll set\n", i);
+      return 1;
+    }
   }
 
   struct libevdev *newdev = libevdev_new();
@@ -150,7 +105,7 @@ int main(int argc, char **argv) {
       return 1;
     }
 
-    printf("Got events: %d\n", nfds);
+    fprintf(stderr, "Got events: %d\n", nfds);
     for (int i = 0; i < nfds; i++) {
       struct libevdev *dev = epoll_events[i].data.ptr;
 
@@ -180,7 +135,4 @@ int main(int argc, char **argv) {
       }
     }
   } while (err == 1 || err == 0 || err == -EAGAIN);
-
-
-  printf("hi\n");
 }
