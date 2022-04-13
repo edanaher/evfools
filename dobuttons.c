@@ -14,7 +14,7 @@ int main() {
   int fd;
   int err;
 
-  fd = open("/dev/input/event30", O_RDONLY|O_NONBLOCK);
+  fd = open("/dev/input/by-id/virtual-kmonad-device", O_RDONLY|O_NONBLOCK);
 
   err = libevdev_new_from_fd(fd, &dev);
   if (err < 0) {
