@@ -8,13 +8,68 @@
 #include <sys/epoll.h>
 #include <unistd.h>
 
+#include <toml.h>
+
 #define MAX_EVENTS 10
+
+struct inputDevice {
+  char *name;
+  char *map;
+};
+
+int readConf(char *filename) {
+  FILE *fp = fopen(filename, "r");
+  char errbuf[200];
+  if (!fp) {
+    fprintf(stderr, "Unable to open configuration file '%s'\n", filename);
+    return -1;
+  }
+
+  toml_table_t * conf = toml_parse_file(fp, errbuf, sizeof(errbuf));
+  fclose(fp);
+
+  if (!conf) {
+    fprintf(stderr, "Unable to parse configuration file '%s': %s\n", filename, errbuf);
+    return -1;
+  }
+
+  printf("Read toml\n");
+  for (int i = 0; ; i++) {
+    const char* key = toml_key_in(conf, i);
+    if (!key)
+      break;
+    toml_table_t *dev = toml_table_in(conf, key);
+    toml_datum_t device = toml_string_in(dev, "device");
+    if (!device.ok) {
+      fprintf(stderr, "No device field found on dev %s", key);
+      continue;
+    }
+    printf("device %i - %s: %s\n", i, key, device.u.s);
+    toml_table_t *remap = toml_table_in(dev, "remap");
+    if (remap) {
+      for (int j = 0; ; j++) {
+        const char* from = toml_key_in(remap, j);
+        if (!from)
+          break;
+        toml_datum_t to = toml_string_in(remap, from);
+        if (!to.ok) {
+          fprintf(stderr, "Missing or non-string mapping for %s on device %s\n", from, key);
+        }
+        printf("remap %s to %s\n", from, to.u.s);
+      }
+    }
+  }
+
+
+}
 
 int main(int argc, char **argv) {
   int ndevices = argc - 1;
   struct libevdev **devs = calloc(ndevices, sizeof(struct libevdev *));
   int *fds = calloc(ndevices, sizeof(int));
   int err;
+
+  readConf("evmerge.toml");
 
   fprintf(stderr, "argc: %d; argv[1]: %s\n", argc, argv[1]);
   for (int i = 0; i < ndevices; i++) {
