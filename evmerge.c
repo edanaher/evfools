@@ -13,13 +13,42 @@
 #define MAX_EVENTS 10
 
 struct inputDevice {
-  char *name;
-  char *map;
-};
+  const char *name;
+  const char *dev;
+  int *map;
+} *inputDevs;
+int nInputDevs = 0;
+
+int tomlSize(toml_table_t *t) {
+  int size;
+  for (size = 0; ; size++) {
+    const char* k = toml_key_in(t, size);
+    if (!k)
+      break;
+  }
+  return size;
+}
+
+int lookupKey(const char *k) {
+  if(!strcmp(k, "1"))
+    return KEY_1;
+  if(!strcmp(k, "2"))
+    return KEY_2;
+  if(!strcmp(k, "3"))
+    return KEY_3;
+  if(!strcmp(k, "4"))
+    return KEY_4;
+  if(!strcmp(k, "5"))
+    return KEY_5;
+  if(!strcmp(k, "6"))
+    return KEY_6;
+  return -1;
+}
 
 int readConf(char *filename) {
   FILE *fp = fopen(filename, "r");
   char errbuf[200];
+  int j;
   if (!fp) {
     fprintf(stderr, "Unable to open configuration file '%s'\n", filename);
     return -1;
@@ -33,7 +62,8 @@ int readConf(char *filename) {
     return -1;
   }
 
-  printf("Read toml\n");
+  inputDevs = calloc(tomlSize(conf), sizeof(struct inputDevice));
+
   for (int i = 0; ; i++) {
     const char* key = toml_key_in(conf, i);
     if (!key)
@@ -41,22 +71,52 @@ int readConf(char *filename) {
     toml_table_t *dev = toml_table_in(conf, key);
     toml_datum_t device = toml_string_in(dev, "device");
     if (!device.ok) {
-      fprintf(stderr, "No device field found on dev %s", key);
-      continue;
+      fprintf(stderr, "Config error: No device field found on dev %s", key);
+      exit(1);
     }
     printf("device %i - %s: %s\n", i, key, device.u.s);
+    inputDevs[nInputDevs].name = key;
+    inputDevs[nInputDevs].dev = device.u.s;
     toml_table_t *remap = toml_table_in(dev, "remap");
     if (remap) {
-      for (int j = 0; ; j++) {
+      int nRemaps;
+      for (int nRemaps = 0; ; nRemaps++) {
+        const char* from = toml_key_in(remap, nRemaps);
+        if (!from)
+          break;
+      }
+      inputDevs[nInputDevs].map = calloc(2*tomlSize(remap) + 1, sizeof(inputDevs[0].map[0]));
+      for (j = 0; ; j++) {
         const char* from = toml_key_in(remap, j);
         if (!from)
           break;
         toml_datum_t to = toml_string_in(remap, from);
         if (!to.ok) {
-          fprintf(stderr, "Missing or non-string mapping for %s on device %s\n", from, key);
+          fprintf(stderr, "Config erorr: Missing or non-string mapping for %s on device %s\n", from, key);
+          exit(1);
         }
+        inputDevs[nInputDevs].map[2*j] = lookupKey(from);
+        inputDevs[nInputDevs].map[2*j+1] = lookupKey(to.u.s);
         printf("remap %s to %s\n", from, to.u.s);
       }
+      inputDevs[nInputDevs].map[2*j] = 0;
+      free(remap);
+    } else {
+      inputDevs[nInputDevs].map = NULL;
+    }
+
+    //free(dev);
+    nInputDevs++;
+  }
+  free(conf);
+
+  for (int i = 0; i < nInputDevs; i++) {
+    printf("Input %d %s: %s\n", i, inputDevs[i].name, inputDevs[i].dev);
+    if (inputDevs[i].map) {
+      printf("  Remapping:");
+      for (int j = 0; inputDevs[i].map[j]; j += 2)
+        printf(" %d => %d;", inputDevs[i].map[j], inputDevs[i].map[j+1]);
+      printf("\n");
     }
   }
 
@@ -64,32 +124,32 @@ int readConf(char *filename) {
 }
 
 int main(int argc, char **argv) {
-  int ndevices = argc - 1;
-  struct libevdev **devs = calloc(ndevices, sizeof(struct libevdev *));
-  int *fds = calloc(ndevices, sizeof(int));
+  struct libevdev **devs;
+  int *fds;
   int err;
 
   readConf("evmerge.toml");
+  devs = calloc(nInputDevs, sizeof(struct libevdev *));
+  fds = calloc(nInputDevs, sizeof(int));
 
-  fprintf(stderr, "argc: %d; argv[1]: %s\n", argc, argv[1]);
-  for (int i = 0; i < ndevices; i++) {
-    fds[i] = open(argv[i+1], O_RDONLY|O_NONBLOCK);
+  for (int i = 0; i < nInputDevs; i++) {
+    fds[i] = open(inputDevs[i].dev, O_RDONLY|O_NONBLOCK);
     if (fds[i] < 0) {
-      fprintf(stderr, "Failed to open input %d (%s): %s", i, argv[i+1], strerror(-err));
+      fprintf(stderr, "Failed to open input %s (%s): %s", inputDevs[i].name, inputDevs[i].dev, strerror(-err));
       return 1;
     }
 
     err = libevdev_new_from_fd(fds[i], &devs[i]);
     if (err < 0) {
-      fprintf(stderr, "Failed to init libevdev %d (%s): %s\n", i, argv[i+1], strerror(-err));
+      fprintf(stderr, "Failed to init libevdev %s (%s): %s\n", inputDevs[i].name, inputDevs[i].dev, strerror(-err));
       return 1;
     }
     err = libevdev_grab(devs[i], LIBEVDEV_GRAB);
     if (err < 0) {
-      fprintf(stderr, "Failed to grab device %d (%s): %s\n", i, argv[i+1], strerror(-err));
+      fprintf(stderr, "Failed to grab device %s (%s): %s\n", inputDevs[i].name, inputDevs[i].dev, strerror(-err));
       return 1;
     }
-    fprintf(stderr, "Binding device %s: '%s'\n", argv[i+1], libevdev_get_name(devs[i]));
+    fprintf(stderr, "Binding device %s: (%s) '%s'\n", inputDevs[i].name, inputDevs[i].dev, libevdev_get_name(devs[i]));
 
     fprintf(stderr, "  Version is %d\n", libevdev_get_id_version(devs[i]));
     fprintf(stderr, "  Vendor id is %x\n", libevdev_get_id_vendor(devs[i]));
@@ -103,9 +163,9 @@ int main(int argc, char **argv) {
   }
 
   struct epoll_event epoll_ev;
-  for (int i = 0; i < ndevices; i++) {
+  for (int i = 0; i < nInputDevs; i++) {
     epoll_ev.events = EPOLLIN;
-    epoll_ev.data.ptr = devs[i];
+    epoll_ev.data.ptr = (void *)i;
     if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fds[i], &epoll_ev) == -1) {
       fprintf(stderr, "Failed to add fds[%d] to epoll set\n", i);
       return 1;
@@ -162,22 +222,18 @@ int main(int argc, char **argv) {
 
     fprintf(stderr, "Got events: %d\n", nfds);
     for (int i = 0; i < nfds; i++) {
-      struct libevdev *dev = epoll_events[i].data.ptr;
+      int devIndex = (int)epoll_events[i].data.ptr;
+      struct libevdev *dev = devs[devIndex];
+
 
       while(!(err = libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev))) {
-        if(dev == devs[2]) {
-          switch(ev.code) {
-            case KEY_1:
-              ev.code = KEY_4;
+        int *map = inputDevs[devIndex].map; 
+        if (map) 
+          for (int i = 0; map[i]; i += 2)
+            if (map[i] == ev.code) {
+              ev.code = map[i+1];
               break;
-            case KEY_2:
-              ev.code = KEY_5;
-              break;
-            case KEY_3:
-              ev.code = KEY_6;
-              break;
-          }
-        }
+            }
         fprintf(stderr, "Event: %s %s %d\n",
             libevdev_event_type_get_name(ev.type),
             libevdev_event_code_get_name(ev.type, ev.code),
