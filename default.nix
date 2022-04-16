@@ -41,10 +41,13 @@ stdenv.mkDerivation {
 
   buildInputs = [ libevdev tomlc99 ];
 
+  dontStrip = true;
+
   installPhase = ''
     mkdir -p $out/bin
     cp evmerge $out/bin
     cp dobuttons $out/bin
+    cp evmorse $out/bin
   '';
 
   meta =  {
