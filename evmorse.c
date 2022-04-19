@@ -83,6 +83,7 @@ int main() {
   libevdev_enable_event_type(newdev, EV_KEY);
   libevdev_enable_event_code(newdev, EV_KEY, KEY_LEFTCTRL, NULL);
   libevdev_enable_event_code(newdev, EV_KEY, KEY_LEFTSHIFT, NULL);
+  libevdev_enable_event_code(newdev, EV_KEY, KEY_RIGHTALT, NULL);
   libevdev_enable_event_code(newdev, EV_KEY, KEY_TAB, NULL);
   libevdev_enable_event_code(newdev, EV_KEY, KEY_A, NULL);
   libevdev_enable_event_code(newdev, EV_KEY, KEY_B, NULL);
@@ -111,11 +112,23 @@ int main() {
   libevdev_enable_event_code(newdev, EV_KEY, KEY_X, NULL);
   libevdev_enable_event_code(newdev, EV_KEY, KEY_Y, NULL);
   libevdev_enable_event_code(newdev, EV_KEY, KEY_Z, NULL);
+  libevdev_enable_event_code(newdev, EV_KEY, KEY_1, NULL);
+  libevdev_enable_event_code(newdev, EV_KEY, KEY_2, NULL);
+  libevdev_enable_event_code(newdev, EV_KEY, KEY_3, NULL);
+  libevdev_enable_event_code(newdev, EV_KEY, KEY_4, NULL);
+  libevdev_enable_event_code(newdev, EV_KEY, KEY_5, NULL);
+  libevdev_enable_event_code(newdev, EV_KEY, KEY_6, NULL);
+  libevdev_enable_event_code(newdev, EV_KEY, KEY_7, NULL);
+  libevdev_enable_event_code(newdev, EV_KEY, KEY_8, NULL);
+  libevdev_enable_event_code(newdev, EV_KEY, KEY_9, NULL);
+  libevdev_enable_event_code(newdev, EV_KEY, KEY_0, NULL);
   libevdev_enable_event_code(newdev, EV_KEY, KEY_SPACE, NULL);
   libevdev_enable_event_code(newdev, EV_KEY, KEY_COMMA, NULL);
   libevdev_enable_event_code(newdev, EV_KEY, KEY_DOT, NULL);
+  libevdev_enable_event_code(newdev, EV_KEY, KEY_GRAVE, NULL);
   libevdev_enable_event_code(newdev, EV_KEY, KEY_DOWN, NULL);
   libevdev_enable_event_code(newdev, EV_KEY, KEY_UP, NULL);
+  libevdev_enable_event_code(newdev, EV_KEY, KEY_BACKSPACE, NULL);
 
   struct libevdev_uinput *uidev;
 
@@ -165,6 +178,16 @@ int main() {
   mapping[25] = KEY_X;
   mapping[27] = KEY_Y;
   mapping[28] = KEY_Z;
+  mapping[47] = KEY_1;
+  mapping[39] = KEY_2;
+  mapping[35] = KEY_3;
+  mapping[33] = KEY_4;
+  mapping[32] = KEY_5;
+  mapping[48] = KEY_6;
+  mapping[56] = KEY_7;
+  mapping[60] = KEY_8;
+  mapping[62] = KEY_9;
+  mapping[63] = KEY_0;
 
   int average_length = 100000;
   int average_pause = 200000;
@@ -217,32 +240,6 @@ int main() {
           int timeDiff = (ev.time.tv_sec - lastEvent.tv_sec) * 1000000 + (ev.time.tv_usec - lastEvent.tv_usec);
           if(ev.value == 1) {
             if (!pressed) {
-              /*if (timeDiff > 20 * average_pause | timeDiff < 0) {
-                printf("%6d %4d Break\n", timeDiff / 1000, average_pause / 1000);
-                cur_char = 1;
-              }
-              if (timeDiff > 8 * average_pause) {
-                printf("%6d %4d Space\n", timeDiff / 1000, average_pause / 1000);
-              } else if (timeDiff > average_pause) {
-                printf("%6d %4d Letter %d\n", timeDiff / 1000, average_pause / 1000, cur_char);
-                int c = mapping[cur_char];
-                printf("Mapped %d to %d\n", cur_char, c);
-                if (c > 0) {
-                  err = libevdev_uinput_write_event(uidev, EV_KEY, c, 1);
-                  if (err != 0) {
-                    fprintf(stderr, "Failed in writing to uinput device (%s)\n", strerror(-err));
-                    return 1;
-                  }
-                  err = libevdev_uinput_write_event(uidev, EV_KEY, c, 0);
-                  if (err != 0) {
-                    fprintf(stderr, "Failed in writing to uinput device (%s)\n", strerror(-err));
-                    return 1;
-                  }
-                }
-                cur_char = 1;
-              } else {
-                printf("%6d %4d Gap\n", timeDiff / 1000, average_pause / 1000);
-              }*/
               /*if (timeDiff < 20 * average_pause && timeDiff > 0)
                 average_pause = average_pause * 0.9 + timeDiff * 0.1;*/
               lastEvent = ev.time;
