@@ -9,20 +9,13 @@
 #include <unistd.h>
 
 #define MAX_EVENTS 10
+#define SHIFT_BIT (1 << 0)
+#define CTRL_BIT (1 << 1)
+#define ALT_BIT (1 << 2)
+#define SUPER_BIT (1 << 3)
 
-  
-int send_key(struct libevdev_uinput *uidev, char c) {
-  int err = libevdev_uinput_write_event(uidev, EV_KEY, c, 1);
-  if (err != 0) {
-    fprintf(stderr, "Failed in writing to uinput device (%s)\n", strerror(-err));
-    return 1;
-  }
-  err = libevdev_uinput_write_event(uidev, EV_SYN, SYN_REPORT, 0);
-  if (err != 0) {
-    fprintf(stderr, "Failed in writing to uinput device (%s)\n", strerror(-err));
-    return 1;
-  }
-  err = libevdev_uinput_write_event(uidev, EV_KEY, c, 0);
+int set_key_state(struct libevdev_uinput *uidev, char c, int v) {
+  int err = libevdev_uinput_write_event(uidev, EV_KEY, c, v);
   if (err != 0) {
     fprintf(stderr, "Failed in writing to uinput device (%s)\n", strerror(-err));
     return 1;
@@ -33,6 +26,19 @@ int send_key(struct libevdev_uinput *uidev, char c) {
     return 1;
   }
   return 0;
+}
+
+int press_key(struct libevdev_uinput *uidev, char c) {
+  return set_key_state(uidev, c, 1);
+}
+
+int release_key(struct libevdev_uinput *uidev, char c) {
+  return set_key_state(uidev, c, 0);
+}
+
+int send_key(struct libevdev_uinput *uidev, char c) {
+  return press_key(uidev, c) ||
+         release_key(uidev, c);
 }
 
 int main() {
@@ -83,6 +89,8 @@ int main() {
   libevdev_enable_event_type(newdev, EV_KEY);
   libevdev_enable_event_code(newdev, EV_KEY, KEY_LEFTCTRL, NULL);
   libevdev_enable_event_code(newdev, EV_KEY, KEY_LEFTSHIFT, NULL);
+  libevdev_enable_event_code(newdev, EV_KEY, KEY_LEFTALT, NULL);
+  libevdev_enable_event_code(newdev, EV_KEY, KEY_LEFTMETA, NULL);
   libevdev_enable_event_code(newdev, EV_KEY, KEY_RIGHTALT, NULL);
   libevdev_enable_event_code(newdev, EV_KEY, KEY_TAB, NULL);
   libevdev_enable_event_code(newdev, EV_KEY, KEY_A, NULL);
@@ -194,6 +202,8 @@ int main() {
   int pressed = 0;
   int cur_char = 1;
   int wait_time = -1;
+  int capture_modifier = 0;
+  int mods = 0;
   struct timeval lastEvent = {0, 0};
 
   do {
@@ -214,12 +224,29 @@ int main() {
         send_key(uidev, KEY_SPACE);
         wait_time = -1;
       } else {
-        // send the current letter, and set timeout for a space
-        printf("%6d %4d Letter %d\n", wait_time / 1000, average_pause / 1000, cur_char);
+        // send the current letter with mods, and set timeout for a space
+        printf("%6d %4d Letter %d; mods: %d\n", wait_time / 1000, average_pause / 1000, cur_char, mods);
         int c = mapping[cur_char];
         if (c > 0) {
+          if (mods & SHIFT_BIT)
+            press_key(uidev, KEY_LEFTSHIFT);
+          if (mods & CTRL_BIT)
+            press_key(uidev, KEY_LEFTCTRL);
+          if (mods & ALT_BIT)
+            press_key(uidev, KEY_LEFTALT);
+          if (mods & SUPER_BIT)
+            press_key(uidev, KEY_LEFTMETA);
           send_key(uidev, c);
+          if (mods & SUPER_BIT)
+            release_key(uidev, KEY_LEFTMETA);
+          if (mods & ALT_BIT)
+            release_key(uidev, KEY_LEFTALT);
+          if (mods & CTRL_BIT)
+            release_key(uidev, KEY_LEFTCTRL);
+          if (mods & SHIFT_BIT)
+            release_key(uidev, KEY_LEFTSHIFT);
         }
+        mods = 0;
         cur_char = 1;
         //wait_time = 4 * average_pause / 1000;
         wait_time = -1;
@@ -236,7 +263,27 @@ int main() {
             libevdev_event_code_get_name(ev.type, ev.code),
             ev.value);*/
         int keycode = ev.code;
-        if(ev.type == EV_KEY && keycode == KEY_F17) {
+        if(ev.type == EV_KEY && keycode == KEY_F18) {
+          if (ev.value == 1) {
+            printf("Capturing modifier\n");
+            capture_modifier = 1;
+          } else {
+            printf("Capturing modifier\n");
+            capture_modifier = 0;
+          }
+        } else if(ev.type == EV_KEY && capture_modifier && keycode == KEY_LEFTSHIFT && ev.value == 1) {
+          printf("Capturing shift\n");
+          mods |= SHIFT_BIT;
+        } else if(ev.type == EV_KEY && capture_modifier && keycode == KEY_LEFTCTRL && ev.value == 1) {
+          printf("Capturing ctrl\n");
+          mods |= CTRL_BIT;
+        } else if(ev.type == EV_KEY && capture_modifier && keycode == KEY_LEFTALT && ev.value == 1) {
+          printf("Capturing meta\n");
+          mods |= ALT_BIT;
+        } else if(ev.type == EV_KEY && capture_modifier && keycode == KEY_LEFTMETA && ev.value == 1) {
+          printf("Capturing super\n");
+          mods |= SUPER_BIT;
+        } else if(ev.type == EV_KEY && keycode == KEY_F17) {
           int timeDiff = (ev.time.tv_sec - lastEvent.tv_sec) * 1000000 + (ev.time.tv_usec - lastEvent.tv_usec);
           if(ev.value == 1) {
             if (!pressed) {
