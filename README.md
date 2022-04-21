@@ -9,7 +9,9 @@ hand-free; tasks like scrolling, changing tabs, and closing tabs are easy, and
 morse code provides the ability to follow links by pressing single letters using
 [link hints](https://github.com/philc/vimium/wiki/Using-Link-Hints).
 
-## evmerge
+## Tools
+
+### evmerge
 
 This simple tools combines multiple evdev devices into a single one.  There are
 other tools that do this, but I couldn't get any of them to reliably work, and
@@ -19,14 +21,14 @@ It's complicated a bit by the ability to remap keys for some devices - e.g., if
 two foot pedals send the same keys, one of them can be re-mapped here so that
 kmonad sees each key producing a different value.
 
-## dobuttons
+### dobuttons
 
 This converts various high F-keys to mouse clicks; if this is run after kmonad,
 it can be used to effectively allow kmonad to press mouse buttons as well.
 
 I'm not currently using it; it probably mostly works.
 
-## evmorse
+### evmorse
 
 This converts F17 (as produced by kmonad) into a morse-key that can generate the
 alphabet and numbers via morse code.  (E.g., a short press, quick release, long
@@ -48,3 +50,9 @@ better way to do this.
 I may in the future try to do a faster four-key typing mechanism (two keys per
 foot seems like the most that can be used ergonomically at a reasonable speed).
 But for the moment, morse code is simple and fast enough.
+
+## Building
+
+I use nix.  Run nix-build and it'll Just Work.  Otherwise, it's three simple C
+programs that only depend on libevdev and tomlc99; you can probably figure it
+out.
